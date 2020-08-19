@@ -46,7 +46,7 @@ class GCNLayer(nn.Module):
         # 进行线性变换
         return self.linear(h)
 
-# 定义GCN，由两层GCNLayer构成
+# 定义GCN，由两层GConv构成
 class GCN(nn.Module):
     def __init__(self, in_feats, hidden_dim, num_classes):
         super(GCN, self).__init__()

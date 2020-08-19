@@ -8,7 +8,9 @@ Code using GNN to predict instable units(node classification)
 
 * Python 3.7
 * Pytorch 1.5.0  cudatoolkit=10.2
-* ray-psops
+* ray-psops(private)
+* ray 0.8.6
+* gym 0.9.1
 * dgl 0.4.3
 * pytorch-geometric 1.6.1
 
