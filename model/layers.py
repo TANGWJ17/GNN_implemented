@@ -124,44 +124,69 @@ class Temporal_conv_layer(nn.Module):
 
 # define message function and reduce function
 def gcn_message(edges):
-    # This computes a (batch of) message called 'msg' using the source node's feature 'h'.
-    return {'msg': edges.src['h']}  # edges.src.data is the attribute named ‘h’
+    # This computes a (batch of) message called 'msg' using the source node's feature 'feats' and learnable weigths.
+    return {'msg': edges.src['feats'] * edges.data['weights']}  # edges.src.data is the attribute named ‘feats’
+
 
 def gcn_reduce(nodes):
-    # This computes the new 'h' features by summing received 'msg' in each node's mailbox.
-    return {'h' : torch.sum(nodes.mailbox['msg'], dim=1)}
+    # This computes the new 'feats' features by summing received 'msg' in each node's mailbox.
+    return {'feats' : torch.sum(nodes.mailbox['msg'], dim=1)}
 
-def graph_update(Y, infos):
+def graph_create(Y, infos, weights=None):
     """
-    :param Y: [num_nodes, num_nodes] the Node admittance matrix
+    :param Y: [num_nodes, num_nodes] the processed Node admittance matrix
     :param infos: [num_nodes] the feature of each node
+    :param weights: learnable weigths for message passing, using nn.Embedding()
     :return: update in orignal input
     """
     graph = dgl.DGLGraph(nx.from_numpy_matrix(Y))
     # add features to all the nodes
-    for i, info in enumerate(infos):
-        graph.nodes[i].data['feats'] = info
+    # for i, x in enumerate(infos):
+    #     graph.nodes[i].data['feats'] = x
+    graph.ndata['feats'] = infos
+    graph.edata['weights'] = Y * weights
 
+    return graph
 
 class Spatial_conv(nn.Module):
     """
         Spatial conv layer is a conv layer using message passing, achieved by DGL(deep graph library)
         each message passing operation deals with N nodes with one feature, so we need parallel processing
         Arg:
-            Y: the Node admittance matrix
+            Y: the processed Node admittance matrix
         Shape:
-            Y: [batch_size, num_nodes, num_nodes]
+            Y: [batch_size, frames, num_nodes, num_nodes]
             Input: [batch_size, in_channels, frames, num_nodes]
             Output: [batch_size, out_channels, frame, num_nodes]
         """
-    def __init__(self):
+    def __init__(self, in_channels, num_nodes):
         super(Spatial_conv, self).__init__()
+        self.c_in = in_channels
+        self.weights = nn.Embedding(in_channels, num_nodes, num_nodes)
+
+    def forward(self, Y, x):
+        # message passing
+        for i in range(self.c_in):
+            graph = graph_create(Y, x[:, i, :, :], self.weights[i, :, :])
+            graph.send(graph.edges(), gcn_message)  # Trigger transmits information on all sides
+            graph.recv(graph.nodes(), gcn_reduce)  # Trigger aggregation information on all sides
+            # feats = graph.ndata.pop('feats')
+
+        return f.relu(x)
 
 
 
 if __name__ == '__main__':
-    xx = torch.randn(5, 33, 10, 20)
-    xx = xx.reshape((5, 1, 33, 10, 20))
-    conv = nn.Conv3d(1, 7, kernel_size=(4, 1, 20))
-    x_out = conv(xx)
-    print(x_out.shape)
+    # xx = torch.randn(5, 33, 10, 20)
+    # xx = xx.reshape((5, 1, 33, 10, 20))
+    # conv = nn.Conv3d(1, 7, kernel_size=(4, 1, 20))
+    # x_out = conv(xx)
+    # print(x_out.shape)
+    Y = np.array([[0, 1, 3], [1, 0, 2], [3, 2, 0]])
+    info = np.array([10, 7, 1]).reshape(3, 1)
+    a = graph_create(Y, info)
+    print(a.ndata['feats'])
+    a.nodes[1].data['feats'] = 1
+    print(info)
+
+

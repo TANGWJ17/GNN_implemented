@@ -9,7 +9,7 @@
 import os
 import numpy as np
 from torch.utils.data import Dataset, DataLoader
-from pythonPS.sample_generator import RayWorkerForSampleGenerator
+# from pythonPS.sample_generator import RayWorkerForSampleGenerator
 
 
 class trainSet(Dataset):
