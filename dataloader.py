@@ -16,7 +16,7 @@ class trainSet(Dataset):
     def __init__(self, num, num_nodes, num_features, num_frames):
         self.Y = np.zeros([num, num_nodes, num_nodes, num_frames])          # the time-dependent matrix Y
         self.data = np.zeros([num, num_nodes, num_features, num_frames])    # the time-dependent data
-        self.result = np.ones([num, num_nodes])                                        # the ground truth for nodes
+        self.result = np.ones([num, num_nodes])                             # the ground truth for nodes
 
     def __getitem__(self, index):
         return self.Y[index], self.data[index], self.result[index]
