@@ -16,13 +16,6 @@ import torch.nn as nn
 import torch.nn.functional as f
 from multiprocessing.dummy import Pool
 
-def layer_norm(x):
-    """
-        Layer normalization function.
-        :param x: tensor, [batch_size, channel, time_step, n_route].
-        :return: tensor, [batch_size, channel, time_step, n_route].
-    """
-
 
 class Temporal_conv(nn.Module):
     """
@@ -100,6 +93,7 @@ class Temporal_conv_layer(nn.Module):
         self.act_fun = act_fun
         self.c_in = in_channels
         self.c_out = out_channels
+        self.bh = nn.BatchNorm2d(in_channels)
         if act_fun is 'GLU':
             self.conv = nn.Conv2d(in_channels=in_channels, out_channels=2 * out_channels, kernel_size=(KT, 1))
         else:
@@ -121,6 +115,7 @@ class Temporal_conv_layer(nn.Module):
         # keep the original input for residual connection.
         x_input = x[:, :, self.KT - 1:T, :]
         x_conv = self.conv(x)
+        x_conv = self.bh(x_conv)
 
         if self.act_fun is 'GLU':
             return (x_conv[:, 0:self.c_out, :, :] + x_input) * f.sigmoid(x_conv[:, -self.c_out, :, :])
@@ -139,12 +134,20 @@ def gcn_message(edges):
     # This computes a (batch of) message called 'msg' using the source node's feature 'feats' and learnable weigths.
     return {'msg': edges.src['feats'] * edges.data['weights']}  # edges.src.data is the attribute named ‘feats’
 
-
 def gcn_reduce(nodes):
     # This computes the new 'feats' features by summing received 'msg' in each node's mailbox.
-    return {'feats' : torch.sum(nodes.mailbox['msg'], dim=1)}
+    return {'feats' : torch.mean(nodes.mailbox['msg'], dim=1)}
 
+class NodeApplyModule(nn.Module):
+    def __init__(self, in_feats, out_feats, activation):
+        super(NodeApplyModule, self).__init__()
+        self.linear = nn.Linear(in_feats, out_feats)  # linear transformaer y=Wx+b
+        self.activation = activation
 
+    def forward(self, node):
+        feats = self.linear(node.data['feats'])
+        feats = self.activation(feats)
+        return {'feats' : feats}   # return updated node feature feats(l+1)
 
 class Spatial_conv(nn.Module):
     """
@@ -154,26 +157,24 @@ class Spatial_conv(nn.Module):
             Y: the processed Node admittance matrix
         Shape:
             Y: [batch_size, frames, num_nodes, num_nodes]
-            Input: [batch_size, in_channels, frames, num_nodes]
+            infos: [batch_size, in_channels, frames, num_nodes]
             Output: [batch_size, out_channels, frame, num_nodes]
         """
-    def __init__(self, in_channels, Y, infos):
+    def __init__(self, in_channels, batch_size, frames, num_nodes, Y=None, infos=None):
         super(Spatial_conv, self).__init__()
-        batch_size, frames, num_nodes = Y.shape
         self.c_in = in_channels
         self.Y = Y
         self.infos = infos
-        self.batches = batch_size
-        self.frames = frames
-        self.nodes = num_nodes
         self.graph_list = list(range(batch_size * frames))  # create a graph list for dgl batch
+        self.apply_mod = NodeApplyModule(in_channels, in_channels, f.relu)
         self.weights = nn.Embedding(in_channels, num_nodes, num_nodes)
 
-    def forward(self, x):
+    def forward(self, Y, infos):
         # message passing using parallel processing
-        batches, features, frames, nodes = x.shape
+        batches, features, frames, nodes = infos.shape
         # x_conv = torch.zeros((batches, features, frames, nodes))
-
+        self.Y = Y
+        self.infos = infos
         # not use a parallel processing
         # for i in range(batches * frames):
         #     graph_list[i] = graph_update(Y, x, i, frames, self.weights)
@@ -185,8 +186,10 @@ class Spatial_conv(nn.Module):
         bg_graph = dgl.batch(self.graph_list, node_attrs='feats', edge_attrs='weights')
         bg_graph.send(bg_graph.edges(), gcn_message)  # Trigger transmits information on all sides
         bg_graph.recv(bg_graph.nodes(), gcn_reduce)  # Trigger aggregation information on all sides
-
-        return f.relu(x)
+        bg_graph.apply_nodes(func=self.apply_mod)
+        # get the updated features
+        updated_x = bg_graph.ndata['feats'].reshape((batches, features, frames, nodes))
+        return f.relu(updated_x)
 
     def graph_update(self, number):
         """
@@ -204,6 +207,17 @@ class Spatial_conv(nn.Module):
 
         self.graph_list[number] = graph
         return graph
+
+
+class output_layer(nn.Module):
+    def __init__(self, features, frames):
+        super(output_layer, self).__init__()
+        self.output = nn.Linear(features * frames, 1)
+
+    def forward(self, inputs):
+        batches, features, frames, nodes = inputs.shape
+        output = self.output(inputs.view(batches, nodes, -1))
+        return f.relu(output.view(batches, nodes))
 
 if __name__ == '__main__':
     # xx = torch.randn(5, 33, 10, 20)
