@@ -218,6 +218,134 @@ class output_layer(nn.Module):
         batches, features, frames, nodes = inputs.shape
         output = self.output(inputs.view(batches, nodes, -1))
         return f.relu(output.view(batches, nodes))
+    
+class Spatial_attention_layer(nn.Module):
+    def __init__(self, feats, frames, nodes):
+        super(Spatial_attention_layer, self).__init__()
+        self.W_1 = torch.randn((frames, ))
+        self.W_2 = torch.randn((feats, frames))
+        self.W_3 = torch.randn((feats, ))
+        self.b_s = torch.randn((1, nodes, nodes))
+        self.V_s = torch.randn((nodes, nodes))
+
+    def forward(self, x):
+        # x = x.transpose((0, 2, 3, 1))
+        # compute spatial attention scores
+        # shape of lhs is (batch_size, nodes, frames)
+        lhs = (x @ self.W_1) @ self.W_2
+
+        # shape of rhs is (batch_size, frames, nodes)
+        rhs = self.W_3 @ x.transpose((2, 0, 3, 1))
+
+        # shape of product is (batch_size, nodes, nodes)
+        product = torch.matmul(lhs, rhs)
+
+        S = (self.V_s @ f.sigmoid(product + self.b_s).transpose((1, 2, 0))).transpose((2, 0, 1))
+
+        # normalization
+        S = S - torch.max(S, dim=1)
+        exp = torch.exp(S)
+        S_normalized = exp / torch.sum(exp, dim=1)
+        return S_normalized
+
+class cheb_conv_SAT(nn.Module):
+    def __init__(self, filters, features, K, cheb_polynomials):
+        super(cheb_conv_SAT, self).__init__()
+        self.K = K
+        self.filters = filters
+        self.Theta = torch.randn((K, features, filters))
+        self.cheb_polynomials = cheb_polynomials
+
+    def forward(self, x, spatial_attention):
+        batches, nodes, features, frame = x.shape
+        outputs = []
+        for time_step in range(frame):
+            # shape is (batch_size, V, F)
+            graph_signal = x[:, :, :, time_step]
+            output = torch.zeros((batches, nodes, self.filters))
+            for k in range(self.K):
+                # shape of T_k is (V, V)
+                T_k = self.cheb_polynomials[k]
+
+                # shape of T_k_with_at is (batch_size, V, V)
+                T_k_with_at = T_k * spatial_attention
+
+                # shape of theta_k is (F, num_of_filters)
+                theta_k = self.Theta[k]
+
+                # shape is (batch_size, V, F)
+                rhs = torch.matmul(T_k_with_at.transpose((0, 2, 1)),
+                                   graph_signal)
+
+                output = output + rhs @  theta_k
+            outputs.append(output.expand_dims(-1))
+        return f.relu(torch.cat(*outputs, dim=-1))
+
+class Temporal_attention_layer(nn.Module):
+    def __init__(self, features, frames, nodes):
+        super(Temporal_attention_layer, self).__init__()
+        self.U_1 = torch.randn((nodes, ))
+        self.U_2 = torch.randn((features, nodes))
+        self.U_3 = torch.randn((features, ))
+        self.b_e = torch.randn((1, frames, frames))
+        self.V_e = torch.randn((frames, frames))
+
+    def forward(self, x):
+        # compute temporal attention scores
+        # shape is (N, T, V)
+        lhs = (x.transpose((0, 3, 2, 1)) @ self.U_1) @ self.U_2
+
+        # shape is (N, V, T)
+        rhs = self.U_3 @  x.transpose((2, 0, 1, 3))
+
+        product = torch.matmul(lhs, rhs)
+
+        E = self.V_e @ f.sigmoid(product + self.b_e).transpose((1, 2, 0)).transpose((2, 0, 1))
+
+        # normailzation
+        E = E - torch.max(E, dim=1)
+        exp = torch.exp(E)
+        E_normalized = exp / torch.sum(exp, dim=1)
+        return E_normalized
+
+class ASTGCN_block(nn.Module):
+    def __init__(self, backbone, features, frames, nodes):
+        super(ASTGCN_block, self).__init__()
+        K = backbone['K']
+        num_of_chev_filters = backbone['num_of_chev_filters']
+        num_of_time_filters = backbone['num_of_time_filters']
+        time_conv_strides = backbone['time_conv_strides']
+        cheb_polynomials = backbone["cheb_polynomials"]
+        self.SAT = Spatial_attention_layer(features, frames, nodes)
+        self.cheb_conv = cheb_conv_SAT(num_of_chev_filters, features, K, cheb_polynomials)
+        self.TAT = Temporal_attention_layer(features, frames, nodes)
+        self.time_conv = nn.Conv2d(in_channels=features, out_channels=num_of_time_filters, kernel_size=(1, 3))
+        self.residual_conv = nn.Conv2d(in_channels=features, out_channels=num_of_time_filters, kernel_size=(1, 1))
+        self.ln = nn.LayerNorm()
+
+    def forward(self, x):
+        (batch_size, num_of_vertices,
+         num_of_features, num_of_timesteps) = x.shape
+        # shape is (batch_size, T, T)
+        temporal_At = self.TAt(x)
+
+        x_TAt = torch.matmul(x.reshape(batch_size, -1, num_of_timesteps),
+                             temporal_At) \
+            .reshape(batch_size, num_of_vertices,
+                     num_of_features, num_of_timesteps)
+
+        # cheb gcn with spatial attention
+        spatial_At = self.SAt(x_TAt)
+        spatial_gcn = self.cheb_conv_SAt(x, spatial_At)
+
+        # convolution along time axis
+        time_conv_output = self.time_conv(spatial_gcn.transpose((0, 2, 1, 3))).transpose((0, 2, 1, 3))
+
+        # residual shortcut
+        x_residual = (self.residual_conv(x.transpose((0, 2, 1, 3)))
+                      .transpose((0, 2, 1, 3)))
+
+        return self.ln(f.relu(x_residual + time_conv_output))
 
 if __name__ == '__main__':
     # xx = torch.randn(5, 33, 10, 20)
@@ -230,6 +358,9 @@ if __name__ == '__main__':
     # info = np.array([10, 7, 1]) # .reshape(3, 1)
     # a = graph_create(Y, info)
     # print(a.ndata['feats'])
+    x = torch.randn((12, 4, 5, 9))
+    y = torch.randn((12, 4, 9, 1))
+    print(torch.matmul(x, y).shape)
     print('ok')
 
 
