@@ -18,8 +18,6 @@ Other versions may also work, but the ones listed are the ones I've used
 
 ### Data processing
 
-
-
 Using ray-psops to batch generate samples
 
- 
+### File information
