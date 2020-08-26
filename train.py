@@ -64,8 +64,8 @@ def train():
         net = net.cuda()
 
 
-    data_amount = 100
-    train_data = trainSet(10, 5, 4, 33)
+    data_amount = 90000
+    train_data = trainSet()
     trainloader = DataLoader(train_data, batch_size=4, shuffle=True)
     batch_loader = iter(trainloader)
     optimizer = optim.SGD(net.parameters(), lr=args.lr, momentum=args.momentum,

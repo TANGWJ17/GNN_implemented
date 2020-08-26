@@ -36,7 +36,7 @@ class st_conv_block(nn.Module):
         self.tempo_2_1 = Temporal_conv_layer(out_channels_1, out_channels_2, KT, act_fun='GLU')
         self.tempo_2_2 = Temporal_conv_layer(out_channels_1, out_channels_2, KT, act_fun='GLU')
 
-    def forward(self, infos, Y):
+    def forward(self, infos, Y):  # TODO Y matrix is not available for calculate
         x_0 = self.embed_1 * infos[:, :, 0, :]
         x_1 = self.tempo_1_1(infos[:, :, 1:self.frames_0, :])
         x_2 = self.tempo_1_2(infos[:, :, self.frames_0:, :])

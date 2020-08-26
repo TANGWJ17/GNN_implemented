@@ -309,19 +309,22 @@ class Temporal_attention_layer(nn.Module):
         return E_normalized
 
 class ASTGCN_block(nn.Module):
-    def __init__(self, backbone, features, frames, nodes):
+    def __init__(self, backbone):
         super(ASTGCN_block, self).__init__()
         K = backbone['K']
         num_of_chev_filters = backbone['num_of_chev_filters']
         num_of_time_filters = backbone['num_of_time_filters']
         time_conv_strides = backbone['time_conv_strides']
         cheb_polynomials = backbone["cheb_polynomials"]
+        features = backbone['features']
+        frames = backbone['frames']
+        nodes = backbone['nodes']
         self.SAT = Spatial_attention_layer(features, frames, nodes)
         self.cheb_conv = cheb_conv_SAT(num_of_chev_filters, features, K, cheb_polynomials)
         self.TAT = Temporal_attention_layer(features, frames, nodes)
         self.time_conv = nn.Conv2d(in_channels=features, out_channels=num_of_time_filters, kernel_size=(1, 3))
         self.residual_conv = nn.Conv2d(in_channels=features, out_channels=num_of_time_filters, kernel_size=(1, 1))
-        self.ln = nn.LayerNorm()
+        self.ln = nn.LayerNorm() # TODO set the size of layer
 
     def forward(self, x):
         (batch_size, num_of_vertices,
