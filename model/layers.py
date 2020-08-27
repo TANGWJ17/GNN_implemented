@@ -200,25 +200,31 @@ class Spatial_conv(nn.Module):
         """
         batches = number // self.frames
         frames = number % self.frames
-        graph = dgl.DGLGraph(nx.from_numpy_matrix(self.Y[batches, frames, :, :]))
+        Y_number = 0
+        if frames > 1:
+            Y_number += 1
+            if frames > 11:
+                Y_number += 1
+        graph = dgl.DGLGraph(nx.from_numpy_matrix(self.Y[batches, Y_number, :, :]))
         # add features to all the nodes
         graph.ndata['feats'] = self.infos[batches, :, frames, :]
-        graph.edata['weights'] = self.Y[batches, frames, :, :] * self.weights
+        graph.edata['weights'] = self.Y[batches, Y_number, :, :] * self.weights
 
         self.graph_list[number] = graph
         return graph
 
 
 class output_layer(nn.Module):
-    def __init__(self, features, frames):
+    def __init__(self, features, frames, num_nodes, num_generator):
         super(output_layer, self).__init__()
-        self.output = nn.Linear(features * frames, 1)
+        self.num_generator = num_generator
+        self.output = nn.Linear(features * frames * num_nodes, num_generator)
 
     def forward(self, inputs):
         batches, features, frames, nodes = inputs.shape
-        output = self.output(inputs.view(batches, nodes, -1))
-        return f.relu(output.view(batches, nodes))
-    
+        output = self.output(inputs.view(batches, -1))
+        return f.relu(output.view(batches, self.num_generator))
+
 class Spatial_attention_layer(nn.Module):
     def __init__(self, feats, frames, nodes):
         super(Spatial_attention_layer, self).__init__()
@@ -361,10 +367,12 @@ if __name__ == '__main__':
     # info = np.array([10, 7, 1]) # .reshape(3, 1)
     # a = graph_create(Y, info)
     # print(a.ndata['feats'])
-    x = torch.randn((12, 4, 5, 9))
-    y = torch.randn((12, 4, 9, 1))
-    print(torch.matmul(x, y).shape)
-    print('ok')
+    data = torch.randn((10, 6, 33, 9))
+    out = nn.Linear(6 * 33 * 9, 3)
+    output = out(data.view(10, -1))
+    print(output.shape)
+    outout = f.relu(output.view(10, 3))
+    print(outout)
 
 
 

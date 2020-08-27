@@ -36,7 +36,7 @@ class st_conv_block(nn.Module):
         self.tempo_2_1 = Temporal_conv_layer(out_channels_1, out_channels_2, KT, act_fun='GLU')
         self.tempo_2_2 = Temporal_conv_layer(out_channels_1, out_channels_2, KT, act_fun='GLU')
 
-    def forward(self, infos, Y):  # TODO Y matrix is not available for calculate
+    def forward(self, infos, Y):
         x_0 = self.embed_1 * infos[:, :, 0, :]
         x_1 = self.tempo_1_1(infos[:, :, 1:self.frames_0, :])
         x_2 = self.tempo_1_2(infos[:, :, self.frames_0:, :])
@@ -50,13 +50,13 @@ class st_conv_block(nn.Module):
 
 class Baseline(nn.Module):
     def __init__(self, in_channels, out_channels_1, out_channels_2, KT_1, KT_2,
-                 num_nodes, batch_size, frames, frames_0):
+                 num_nodes, batch_size, frames, frames_0, num_generator):
         super(Baseline, self).__init__()
         self.st_1 = st_conv_block(in_channels, out_channels_1, out_channels_2, KT_1,
                  num_nodes, batch_size, frames, frames_0)
         self.st_2 = st_conv_block(out_channels_2, out_channels_2, out_channels_2, KT_2,
                  num_nodes, batch_size, frames - 4 * (KT_1 - 1), frames_0 - 2 * (KT_1 - 1))
-        self.output_layer = output_layer(out_channels_2, frames - 4 * (KT_1 + KT_2 - 2))
+        self.output_layer = output_layer(out_channels_2, frames - 4 * (KT_1 + KT_2 - 2), num_nodes, num_generator)
 
     def forward(self, Y, infos):
         x_1 = self.st_1(infos, Y)
