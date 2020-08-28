@@ -8,10 +8,11 @@
 
 import os
 import numpy as np
+import torch
 from torch.utils.data import Dataset, DataLoader
 
-def read_data(num_nodes, num):
-    all_Data = np.load('./data/sample.npz', allow_pickle=True)
+def read_data(num_nodes, num, number_data):
+    all_Data = np.load('./data/sample_0_{}.npz'.format(number_data), allow_pickle=True)
     Data = all_Data['arr_0']
     name_dict = dict()
     node_names = Data[0]
@@ -31,7 +32,7 @@ def read_data(num_nodes, num):
         Y[:, 1, :, :] = Y_in  # the Y(in accident)
         Y_after = np.sqrt(np.power(Data[6 + i * 10][2], 2) + np.power(Data[6 + i * 10][3], 2))
         Y[:, 2, :, :] = Y_after  # the Y(after accident)
-        labels[i] = abs(data[11 + i * 10]) > 180
+        labels[i] = np.array(list(map(int, abs(data[11 + i * 10]) - 180)))
         infos[i, :6, :, : ] = data[12 + i * 10].reshape(33, 9, 6).transpose([1, 2, 0])
     for i in range(num_nodes, num):
         added = (i - num_nodes) // num_nodes
@@ -41,15 +42,15 @@ def read_data(num_nodes, num):
             Y[:, 1, :, :] = Y_in  # the Y(in accident)
             Y_after = np.sqrt(np.power(Data[7 + i * 10 + added][2], 2) + np.power(Data[7 + i * 10 + added][3], 2))
             Y[:, 2, :, :] = Y_after  # the Y(after accident)
-            labels[i] = abs(data[12 + i * 10 + added]) > 180
+            labels[i] = np.array(list(map(int, abs(data[12 + i * 10 + added]) - 180)))
             infos[i, :6, :, :] = data[13 + i * 10 + added].reshape(33, 9, 6).transpose([1, 2, 0])
         except IndexError:
             print(i)
     return num_generator, Y, infos, labels
 
 class trainSet(Dataset):
-    def __init__(self, num_nodes, num):
-        num_generator, Y, infos, labels = read_data(num_nodes, num)
+    def __init__(self, num_nodes, num, number_data):
+        num_generator, Y, infos, labels = read_data(num_nodes, num, number_data)
         self.Y = Y            # the matrix Y
         self.data = infos     # the time-dependent data
         self.result = labels  # the ground truth for nodes
@@ -73,8 +74,12 @@ if __name__ == '__main__':
         -1929.3092 ,-1877.5665 ,-1904.0421 ,-2649.57])
     b = abs(a)
     print(b)
-    c = bool(np.subtract(b, 180))
+    c = np.subtract(b, 180) > 0
+
+    # c = map(lambda x: 1 if x else 0, c)
+    c = np.array(list(map(int, c)))
     print(c)
+    print(torch.cuda.device_count())
     exit(0)
     all_data = np.load('./data/sample_0_0.npz', allow_pickle=True)
     data = all_data['arr_0']
