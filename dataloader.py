@@ -9,6 +9,7 @@
 import os
 import numpy as np
 import torch
+import dgl
 from torch.utils.data import Dataset, DataLoader
 
 def Y_process(Y_):
@@ -93,6 +94,11 @@ if __name__ == '__main__':
     # all_Data = np.load('./data/sample_0_{}.npz'.format(0), allow_pickle=True)
     # data = all_Data['arr_0']
     # np.savez('./data/Y_raw.npz', data[1])
+    import networkx as nx
+    a = np.array([[0.0, 0.0, 1.0], [0.0, 0.0, 1.0], [1.0, 1.0, 0.0]])
+    net = nx.from_numpy_matrix(a)
+    print(net.edges)
+    exit(0)
     arr = [1, 2, 3, 4, 5]
     print(arr[-4:])
     exit(0)

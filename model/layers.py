@@ -16,7 +16,7 @@ import torch.nn as nn
 import torch.nn.functional as f
 
 from multiprocessing.dummy import Pool
-
+np.set_printoptions(threshold=10000)
 
 # class Temporal_conv(nn.Module):
 #     """
@@ -166,8 +166,9 @@ class Spatial_conv(nn.Module):
         self.c_in = in_channels
         self.Y = Y
         self.frames = frames
+        self.num_nodes = num_nodes
         self.infos = infos
-        self.graph_list = np.array(list(range(batch_size * frames)))  # create a graph list for dgl batch
+        self.graph_list = list(range(batch_size * frames))  # create a graph list for dgl batch
         self.apply_mod = NodeApplyModule(in_channels, in_channels, f.relu)
         # self.weights = nn.Embedding(in_channels, num_nodes, num_nodes)
         self.weights = torch.nn.Parameter(torch.randn([in_channels, num_nodes, num_nodes]))
@@ -185,7 +186,6 @@ class Spatial_conv(nn.Module):
         # pool = Pool()
         # pool.map(self.graph_update, range(batches * frames))
         # pool.close()
-        print(self.graph_list.shape)
         # create a graph batch and do message passing
         bg_graph = dgl.batch(self.graph_list, node_attrs='feats', edge_attrs='weights')
         print('complete batch')
@@ -193,6 +193,7 @@ class Spatial_conv(nn.Module):
         bg_graph.recv(bg_graph.nodes(), gcn_reduce)  # Trigger aggregation information on all sides
         bg_graph.apply_nodes(func=self.apply_mod)
         # get the updated features
+        print(bg_graph.ndata.shape)
         updated_x = bg_graph.ndata['feats'].reshape((batches, features, frames, nodes))
         return f.relu(updated_x)
 
@@ -212,11 +213,15 @@ class Spatial_conv(nn.Module):
             if frames > 11:
                 Y_number = 2
         Y_need = self.Y[batches, Y_number, :, :].cpu().numpy()
-        print(Y_need.shape)
-        graph = dgl.DGLGraph(nx.from_numpy_matrix(Y_need))
+        print(Y_need)
+        nx_graph = nx.from_numpy_matrix(Y_need)
+        print()
+        graph = dgl.from_networkx(nx_graph)
         # add features to all the nodes
-        graph.ndata['feats'] = self.infos[batches, :, frames, :]
-        graph.edata['weights'] = self.Y[batches, Y_number, :, :] * self.weights
+        graph.ndata['feats'] = self.infos[batches, :, frames, :].T
+        graph.edata['weights'] = (self.Y[batches, Y_number, :, :] *
+                                              self.weights).permute((1, 2, 0))\
+            .reshape((self.num_nodes * self.num_nodes, self.c_in))
 
         self.graph_list[number] = graph
         return graph
