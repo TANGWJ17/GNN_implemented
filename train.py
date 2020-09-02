@@ -17,14 +17,14 @@ import torch.nn.functional as F
 from torch.nn import init
 from dataloader import trainSet
 from baseline import Baseline
+from test import evaluate
 from gat import GAT, GAT_edge
 from loss import MSE_loss, Huber_loss
 import argparse
 
 torch.manual_seed(1)
-print('----------')
-os.environ['CUDA_VISIBLE_DEVICES'] = '0,1'
-
+# os.environ['CUDA_VISIBLE_DEVICES'] = '0,1'
+os.environ['CUDA_VISIBLE_DEVICES'] = '0'
 # torch.distributed.init_process_group(backend='nccl', init_method='tcp://101.6.64.59:8002', rank=0, world_size=1)
 parser = argparse.ArgumentParser(
         description='GNN used in fault nodes prediction')
@@ -36,7 +36,7 @@ parser.add_argument('--cuda', default=True, type=bool,
                         help='using cuda for accelerating')
 parser.add_argument('--init_type', default='xavier', type=str, choices=['normal', 'xavier', 'kaiming', 'orthogonal'],
                         help='several init method')
-parser.add_argument('--lr', '--learning-rate', default=1e-2, type=float,
+parser.add_argument('--lr', '--learning-rate', default=1e-3, type=float,
                         help='initial learning rate')
 parser.add_argument('--save_folder', default='weights/',
                         help='Directory for saving checkpoint models')
@@ -101,18 +101,18 @@ def train():
         except:
             sys.exit('Load Network  <==> Init_weights error!')
 
-    net = nn.DataParallel(net)
+    # net = nn.DataParallel(net)
     net = net.cuda()
 
     accuracy = 0
-    data_amount = 8151
+    data_amount = 160 # 8144
     num_epoch = data_amount // args.batch_size
-    train_data = trainSet(39, 8151, 0)
+    train_data = trainSet(39, data_amount, 0)
     trainloader = DataLoader(train_data, batch_size=args.batch_size, shuffle=True)
     batch_loader = iter(trainloader)
-    # eval_data = trainSet(39, 1600, 1)
-    # evalloader = DataLoader(eval_data, batch_size=args.batch_size, shuffle=True)
-    # eval_loader = iter(evalloader)
+    eval_data = trainSet(39, 160, 1)
+    evalloader = DataLoader(eval_data, batch_size=args.batch_size, shuffle=True)
+    eval_iter = iter(evalloader)
     optimizer = optim.Adam(net.parameters(), lr=args.lr)
     net.train()
     #  train ------------------------------------------------
@@ -120,12 +120,12 @@ def train():
     for epoch in range(num_epoch):
         # load train data
         try:
-            num_generator, Y, infos, labels = next(batch_loader)
-            Y, infos, labels = Y.cuda(), infos.cuda(), labels.cuda()
+            Y, infos, labels = next(batch_loader)
+            Y, infos, labels = Y.float().cuda(), infos.float().cuda(), labels.float().cuda()
         except StopIteration:
             batch_iterator = iter(trainloader)
-            num_generator, Y, infos, labels = next(batch_iterator)
-            Y, infos, labels = Y.cuda(), infos.cuda(), labels.cuda()
+            Y, infos, labels = next(batch_iterator)
+            Y, infos, labels = Y.float().cuda(), infos.float().cuda(), labels.float().cuda()
         label_predicted = net(Y, infos)
         # loss = Huber_loss(label_predicted, labels)
         loss = F.cross_entropy(label_predicted, labels)
@@ -141,12 +141,12 @@ def train():
             f.writelines('epoch:{}/{} | loss:{:.4f}'.format(epoch + 1, num_epoch, loss.item()))
 
         #  eval ------------------------------------------------
-        # if epoch % 20 == 0:
-        #     net.eval()
-        #     accu = 1
-        #     if accu > accuracy:
-        #         torch.save(net.state_dict(), args.save_folder + '{}_{}.pth'.format(args.model_name, accu))
-        #         accuracy = accu
+        if epoch % 20 == 0:
+            net.eval()
+            accu = evaluate(net, eval_iter, evalloader, 1600)
+            if accu > accuracy:
+                torch.save(net.state_dict(), args.save_folder + '{}_{}.pth'.format(args.model_name, accu))
+                accuracy = accu
 
 if __name__ == '__main__':
     train()

@@ -14,64 +14,65 @@ import networkx as nx
 import torch
 import torch.nn as nn
 import torch.nn.functional as f
+
 from multiprocessing.dummy import Pool
 
 
-class Temporal_conv(nn.Module):
-    """
-    Temporal conv layer is a fundamental conv layer residually connected with a GLU
-    Arg:
-        KT: the kernel size of time axis
-        KF: the kernel size of feature axis
-        act_fun: the activate function ['GLU', 'linear', 'relu', 'sigmoid']
-    Shape:
-        Input: [batch_size, channels, frames, num_nodes, num_features]
-        Kernel_size: [K_frames, K_nodes, k_features]
-        Output: [batch_size, out_channels, frame_out, node_out, feature_out]
-    """
-
-    def __init__(self, in_channels, out_channels, KT, KF, act_fun='GLU'):
-        super(Temporal_conv, self).__init__()
-        self.KT = KT
-        self.KF = KF
-        self.act_fun = act_fun
-        self.c_in = in_channels
-        self.c_out = out_channels
-        self.conv = nn.Conv3d(in_channels=in_channels, out_channels=out_channels, kernel_size=(KT, 1, KF))
-
-    def forward(self, x):
-        if len(x.shape) < 5:
-            self.c_in = 1
-            batch, T, N, F = x.shape
-            x = x.reshape(batch, 1, T, N, F)
-        else:
-            batch, self.c_in, T, N, F = x.shape
-        if self.c_in < self.c_out:
-            # if the size of input channel is less than the output,
-            # padding x to the same size of output channel.
-            x = torch.cat((x, torch.zeros(batch, self.c_out-self.c_in, T, N, F)), 1)
-        elif self.c_in > self.c_out:
-            # bottleneck down-sampling
-            kernel = (1, 1, 1)
-            x = nn.Conv3d(in_channels=self.c_in, out_channels=self.c_out, kernel_size=kernel)(x)
-        else:
-            pass
-
-        # keep the original input for residual connection.
-        x_input = x[:, :, self.KT - 1:T, :, self.KF - 1:F]
-
-        if self.act_fun is 'GLU':
-            pass
-        else:
-            pass
-            if self.act_fun is 'linear':
-                pass
-            elif self.act_fun is 'relu':
-                pass
-            elif self.act_fun is 'sigmoid':
-                pass
-            else:
-                raise ValueError(f'ERROR: activation function "{self.act_fun}" is not defined.')
+# class Temporal_conv(nn.Module):
+#     """
+#     Temporal conv layer is a fundamental conv layer residually connected with a GLU
+#     Arg:
+#         KT: the kernel size of time axis
+#         KF: the kernel size of feature axis
+#         act_fun: the activate function ['GLU', 'linear', 'relu', 'sigmoid']
+#     Shape:
+#         Input: [batch_size, channels, frames, num_nodes, num_features]
+#         Kernel_size: [K_frames, K_nodes, k_features]
+#         Output: [batch_size, out_channels, frame_out, node_out, feature_out]
+#     """
+#
+#     def __init__(self, in_channels, out_channels, KT, KF, act_fun='GLU'):
+#         super(Temporal_conv, self).__init__()
+#         self.KT = KT
+#         self.KF = KF
+#         self.act_fun = act_fun
+#         self.c_in = in_channels
+#         self.c_out = out_channels
+#         self.conv = nn.Conv3d(in_channels=in_channels, out_channels=out_channels, kernel_size=(KT, 1, KF))
+#
+#     def forward(self, x):
+#         if len(x.shape) < 5:
+#             self.c_in = 1
+#             batch, T, N, F = x.shape
+#             x = x.reshape(batch, 1, T, N, F)
+#         else:
+#             batch, self.c_in, T, N, F = x.shape
+#         if self.c_in < self.c_out:
+#             # if the size of input channel is less than the output,
+#             # padding x to the same size of output channel.
+#             x = torch.cat((x, torch.zeros(batch, self.c_out-self.c_in, T, N, F)), 1)
+#         elif self.c_in > self.c_out:
+#             # bottleneck down-sampling
+#             kernel = (1, 1, 1)
+#             x = nn.Conv3d(in_channels=self.c_in, out_channels=self.c_out, kernel_size=kernel)(x)
+#         else:
+#             pass
+#
+#         # keep the original input for residual connection.
+#         x_input = x[:, :, self.KT - 1:T, :, self.KF - 1:F]
+#
+#         if self.act_fun is 'GLU':
+#             pass
+#         else:
+#             pass
+#             if self.act_fun is 'linear':
+#                 pass
+#             elif self.act_fun is 'relu':
+#                 pass
+#             elif self.act_fun is 'sigmoid':
+#                 pass
+#             else:
+#                 raise ValueError(f'ERROR: activation function "{self.act_fun}" is not defined.')
 
 
 class Temporal_conv_layer(nn.Module):
@@ -100,8 +101,7 @@ class Temporal_conv_layer(nn.Module):
             self.conv = nn.Conv2d(in_channels=in_channels, out_channels=out_channels, kernel_size=(KT, 1))
 
     def forward(self, x):
-        batch, self.c_in, T, N, F = x.shape
-
+        batch, self.c_in, T, N = x.shape
         if self.c_in < self.c_out:
             # if the size of input channel is less than the output,
             # padding x to the same size of output channel.
@@ -115,10 +115,11 @@ class Temporal_conv_layer(nn.Module):
         # keep the original input for residual connection.
         x_input = x[:, :, self.KT - 1:T, :]
         x_conv = self.conv(x)
-        x_conv = self.bh(x_conv)
+        # x_conv = self.bh(x_conv)
 
         if self.act_fun is 'GLU':
-            return (x_conv[:, 0:self.c_out, :, :] + x_input) * f.sigmoid(x_conv[:, -self.c_out, :, :])
+
+            return (x_conv[:, 0:self.c_out, :, :] + x_input) * torch.sigmoid(x_conv[:, -self.c_out:, :, :])
         else:
             if self.act_fun is 'linear':
                 return x_conv
@@ -164,10 +165,12 @@ class Spatial_conv(nn.Module):
         super(Spatial_conv, self).__init__()
         self.c_in = in_channels
         self.Y = Y
+        self.frames = frames
         self.infos = infos
-        self.graph_list = list(range(batch_size * frames))  # create a graph list for dgl batch
+        self.graph_list = np.array(list(range(batch_size * frames)))  # create a graph list for dgl batch
         self.apply_mod = NodeApplyModule(in_channels, in_channels, f.relu)
-        self.weights = nn.Embedding(in_channels, num_nodes, num_nodes)
+        # self.weights = nn.Embedding(in_channels, num_nodes, num_nodes)
+        self.weights = torch.nn.Parameter(torch.randn([in_channels, num_nodes, num_nodes]))
 
     def forward(self, Y, infos):
         # message passing using parallel processing
@@ -176,14 +179,16 @@ class Spatial_conv(nn.Module):
         self.Y = Y
         self.infos = infos
         # not use a parallel processing
-        # for i in range(batches * frames):
-        #     graph_list[i] = graph_update(Y, x, i, frames, self.weights)
+        for i in range(batches * frames):
+            self.graph_update(i)
         # using pool to accelerate the process
-        pool = Pool()
-        pool.map(self.graph_update, range(batches * frames))
-        pool.close()
+        # pool = Pool()
+        # pool.map(self.graph_update, range(batches * frames))
+        # pool.close()
+        print(self.graph_list.shape)
         # create a graph batch and do message passing
         bg_graph = dgl.batch(self.graph_list, node_attrs='feats', edge_attrs='weights')
+        print('complete batch')
         bg_graph.send(bg_graph.edges(), gcn_message)  # Trigger transmits information on all sides
         bg_graph.recv(bg_graph.nodes(), gcn_reduce)  # Trigger aggregation information on all sides
         bg_graph.apply_nodes(func=self.apply_mod)
@@ -198,14 +203,17 @@ class Spatial_conv(nn.Module):
         :param weights: [features, num_nodes, num_nodes] learnable weigths for message passing, using nn.Embedding()
         :return: graph
         """
+        # todo frames的判断应该根据frame_0来
         batches = number // self.frames
         frames = number % self.frames
         Y_number = 0
-        if frames > 1:
-            Y_number += 1
+        if frames >= 1:
+            Y_number = 1
             if frames > 11:
-                Y_number += 1
-        graph = dgl.DGLGraph(nx.from_numpy_matrix(self.Y[batches, Y_number, :, :]))
+                Y_number = 2
+        Y_need = self.Y[batches, Y_number, :, :].cpu().numpy()
+        print(Y_need.shape)
+        graph = dgl.DGLGraph(nx.from_numpy_matrix(Y_need))
         # add features to all the nodes
         graph.ndata['feats'] = self.infos[batches, :, frames, :]
         graph.edata['weights'] = self.Y[batches, Y_number, :, :] * self.weights

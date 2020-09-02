@@ -28,8 +28,8 @@ class st_conv_block(nn.Module):
         super(st_conv_block, self).__init__()
         self.frames_0 = frames_0
         self.KT = KT
-        self.embed_1 = nn.Embedding(frames, 1, num_nodes)
-        self.embed_2 = nn.Embedding(frames, 1, num_nodes)
+        self.embed_1 = torch.nn.Parameter(torch.randn([in_channels, 1, num_nodes]))
+        self.embed_2 = torch.nn.Parameter(torch.randn([out_channels_1, 1, num_nodes]))
         self.tempo_1_1 = Temporal_conv_layer(in_channels, out_channels_1, KT, act_fun='GLU')
         self.tempo_1_2 = Temporal_conv_layer(in_channels, out_channels_1, KT, act_fun='GLU')
         self.spat = Spatial_conv(out_channels_1, batch_size, frames - 2 * (KT - 1), num_nodes)
@@ -37,12 +37,14 @@ class st_conv_block(nn.Module):
         self.tempo_2_2 = Temporal_conv_layer(out_channels_1, out_channels_2, KT, act_fun='GLU')
 
     def forward(self, infos, Y):
-        x_0 = self.embed_1 * infos[:, :, 0, :]
+        print('st  t forward')
+        x_0 = self.embed_1 * (infos[:, :, 0, :])[:, :, np.newaxis, :]
         x_1 = self.tempo_1_1(infos[:, :, 1:self.frames_0, :])
         x_2 = self.tempo_1_2(infos[:, :, self.frames_0:, :])
         x_conv = torch.cat([x_0, x_1, x_2], 2)
         x_updated = self.spat(Y, x_conv)
-        g_0 = self.embed_2 * x_updated[:, :, 0, :]
+        print('st t forward')
+        g_0 = self.embed_2 * (x_updated[:, :, 0, :])[:, :, np.newaxis, :]
         g_1 = self.tempo_2_1(x_updated[:, :, 1:self.frames_0 - (self.KT - 1), :])
         g_2 = self.tempo_2_2(x_updated[:, :, self.frames_0 - (self.KT - 1):, :])
         g_conv = torch.cat([g_0, g_1, g_2], 2)
@@ -59,7 +61,9 @@ class Baseline(nn.Module):
         self.output_layer = output_layer(out_channels_2, frames - 4 * (KT_1 + KT_2 - 2), num_nodes, num_generator)
 
     def forward(self, Y, infos):
+        print('start forward')
         x_1 = self.st_1(infos, Y)
+        print('nothing happened')
         x_2 = self.st_2(x_1, Y)
         return self.output_layer(x_2)
 
