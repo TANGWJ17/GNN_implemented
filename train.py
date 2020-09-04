@@ -7,6 +7,7 @@
 """
 import os
 import sys
+import time
 
 import torch
 import torch.optim as optim
@@ -105,7 +106,7 @@ def train():
     net = net.cuda()
 
     accuracy = 0
-    data_amount = 160 # 8144
+    data_amount = 1600 # 8144
     num_epoch = data_amount // args.batch_size
     train_data = trainSet(39, data_amount, 0)
     trainloader = DataLoader(train_data, batch_size=args.batch_size, shuffle=True)
@@ -117,6 +118,7 @@ def train():
     net.train()
     #  train ------------------------------------------------
     print('---- epoch start ----')
+    start_time = time.time()
     for epoch in range(num_epoch):
         # load train data
         try:
@@ -127,26 +129,26 @@ def train():
             Y, infos, labels = next(batch_iterator)
             Y, infos, labels = Y.float().cuda(), infos.float().cuda(), labels.float().cuda()
         label_predicted = net(Y, infos)
-        # loss = Huber_loss(label_predicted, labels)
-        loss = F.cross_entropy(label_predicted, labels)
+        loss = MSE_loss(label_predicted, labels.long())
+        # loss = F.cross_entropy(label_predicted, labels.long())
         optimizer.zero_grad()
         loss.backward()
         optimizer.step()
-        # if epoch % 10 == 0:
-        #     torch.save(net.state_dict(),
-        #                args.save_folder + '/' + args.model_name +
-        #                '_' + str(epoch) + '_' + str(loss) + '.pth')
         print('epoch:{}/{} | loss:{:.4f}'.format(epoch + 1, num_epoch, loss.item()))
         with open(args.log_folder + 'loss_accu.log', mode='a') as f:
-            f.writelines('epoch:{}/{} | loss:{:.4f}'.format(epoch + 1, num_epoch, loss.item()))
+            f.writelines('\n epoch:{}/{} | loss:{:.4f}'.format(epoch + 1, num_epoch, loss.item()))
 
         #  eval ------------------------------------------------
         if epoch % 20 == 0:
             net.eval()
-            accu = evaluate(net, eval_iter, evalloader, 1600)
+            accu, _ = evaluate(model=net, data_iter=eval_iter, data_loader=evalloader, num_epoch=10)
+            print('accuracy:{}'.format(accu))
             if accu > accuracy:
-                torch.save(net.state_dict(), args.save_folder + '{}_{}.pth'.format(args.model_name, accu))
+                torch.save(net.state_dict(), args.save_folder + '{}_{}.pth'.format(args.model, accu))
                 accuracy = accu
+
+    stop_time = time.time()
+    print("program run for {} s".format(stop_time - start_time))
 
 if __name__ == '__main__':
     train()

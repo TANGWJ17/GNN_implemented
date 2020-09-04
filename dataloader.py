@@ -94,10 +94,24 @@ if __name__ == '__main__':
     # all_Data = np.load('./data/sample_0_{}.npz'.format(0), allow_pickle=True)
     # data = all_Data['arr_0']
     # np.savez('./data/Y_raw.npz', data[1])
+
+    a = np.array([0, 1, 0])
+    b = np.array([True, True, False])
+    c = 1 - a ^ b
+    print(c)
+    exit(0)
     import networkx as nx
     a = np.array([[0.0, 0.0, 1.0], [0.0, 0.0, 1.0], [1.0, 1.0, 0.0]])
-    net = nx.from_numpy_matrix(a)
-    print(net.edges)
+    net = dgl.from_networkx(nx.from_numpy_matrix(a))
+    net.ndata['feats'] = torch.randn((3, 5))
+    print(net.edges())
+    a = net.nodes[0].data['feats']
+    b = net.nodes[1].data['feats']
+    print(a.shape)
+    c = torch.cat([a, b], 1)
+    print(c.shape)
+    print(net.nodes[0].data['feats'].shape)
+
     exit(0)
     arr = [1, 2, 3, 4, 5]
     print(arr[-4:])

@@ -130,14 +130,6 @@ class Temporal_conv_layer(nn.Module):
             else:
                 raise ValueError(f'ERROR: activation function "{self.act_fun}" is not defined.')
 
-# define message function and reduce function
-def gcn_message(edges):
-    # This computes a (batch of) message called 'msg' using the source node's feature 'feats' and learnable weigths.
-    return {'msg': edges.src['feats'] * edges.data['weights']}  # edges.src.data is the attribute named ‘feats’
-
-def gcn_reduce(nodes):
-    # This computes the new 'feats' features by summing received 'msg' in each node's mailbox.
-    return {'feats' : torch.mean(nodes.mailbox['msg'], dim=1)}
 
 class NodeApplyModule(nn.Module):
     def __init__(self, in_feats, out_feats, activation):
@@ -149,6 +141,13 @@ class NodeApplyModule(nn.Module):
         feats = self.linear(node.data['feats'])
         feats = self.activation(feats)
         return {'feats' : feats}   # return updated node feature feats(l+1)
+
+
+def gcn_reduce(nodes):
+    # This computes the new 'feats' features by summing received 'msg' in each node's mailbox.
+    return {'feats': torch.mean(nodes.mailbox['msg'], dim=1)}
+    # return dgl.function.mean('msg', 'feats')
+
 
 class Spatial_conv(nn.Module):
     """
@@ -171,7 +170,16 @@ class Spatial_conv(nn.Module):
         self.graph_list = list(range(batch_size * frames))  # create a graph list for dgl batch
         self.apply_mod = NodeApplyModule(in_channels, in_channels, f.relu)
         # self.weights = nn.Embedding(in_channels, num_nodes, num_nodes)
-        self.weights = torch.nn.Parameter(torch.randn([in_channels, num_nodes, num_nodes]))
+        # self.weights = torch.nn.Parameter(torch.randn([in_channels, num_nodes, num_nodes]))
+        self.denseLayer = torch.nn.Linear(3 * self.c_in, self.c_in)
+
+    # define message function and reduce function
+    def gcn_message(self, edges):
+        # This computes a (batch of) message called 'msg' using the source node's feature 'feats' and learnable weigths.
+        src_feats = edges.src['feats']
+        dst_feats = edges.dst['feats']
+        msg = edges.src['feats'] * self.denseLayer(torch.cat([src_feats, dst_feats, src_feats - dst_feats], 1))
+        return {'msg': msg}  # edges.src.data is the attribute named ‘feats’
 
     def forward(self, Y, infos):
         # message passing using parallel processing
@@ -180,21 +188,22 @@ class Spatial_conv(nn.Module):
         self.Y = Y
         self.infos = infos
         # not use a parallel processing
-        for i in range(batches * frames):
-            self.graph_update(i)
+        # for i in range(batches * frames):
+        #     self.graph_update(i)
         # using pool to accelerate the process
-        # pool = Pool()
-        # pool.map(self.graph_update, range(batches * frames))
-        # pool.close()
+        pool = Pool()
+        pool.map(self.graph_update, range(batches * frames))
+        pool.close()
         # create a graph batch and do message passing
-        bg_graph = dgl.batch(self.graph_list, node_attrs='feats', edge_attrs='weights')
-        print('complete batch')
-        bg_graph.send(bg_graph.edges(), gcn_message)  # Trigger transmits information on all sides
-        bg_graph.recv(bg_graph.nodes(), gcn_reduce)  # Trigger aggregation information on all sides
+        bg_graph = dgl.batch(self.graph_list)
+        # bg_graph.send(bg_graph.edges(), self.gcn_message)  # Trigger transmits information on all sides
+        # bg_graph.recv(bg_graph.nodes(), self.gcn_reduce)  # Trigger aggregation information on all sides
+        bg_graph.update_all(self.gcn_message, gcn_reduce)
         bg_graph.apply_nodes(func=self.apply_mod)
         # get the updated features
-        print(bg_graph.ndata.shape)
-        updated_x = bg_graph.ndata['feats'].reshape((batches, features, frames, nodes))
+        # todo use unbatch to get the ndata
+        updated_x = bg_graph.ndata['feats'].reshape((batches, frames, nodes, features))
+        updated_x = updated_x.permute(0, 3, 1, 2)
         return f.relu(updated_x)
 
     def graph_update(self, number):
@@ -213,15 +222,13 @@ class Spatial_conv(nn.Module):
             if frames > 11:
                 Y_number = 2
         Y_need = self.Y[batches, Y_number, :, :].cpu().numpy()
-        print(Y_need)
         nx_graph = nx.from_numpy_matrix(Y_need)
-        print()
-        graph = dgl.from_networkx(nx_graph)
+        graph = dgl.from_networkx(nx_graph)# .to(torch.device('cpu'))
         # add features to all the nodes
-        graph.ndata['feats'] = self.infos[batches, :, frames, :].T
-        graph.edata['weights'] = (self.Y[batches, Y_number, :, :] *
-                                              self.weights).permute((1, 2, 0))\
-            .reshape((self.num_nodes * self.num_nodes, self.c_in))
+        graph.ndata['feats'] = (self.infos[batches, :, frames, :]).T
+        # graph.edata['weights'] = (self.Y[batches, Y_number, :, :] *
+        #                                       self.weights).permute((1, 2, 0))\
+        #     .reshape((self.num_nodes * self.num_nodes, self.c_in))
 
         self.graph_list[number] = graph
         return graph
@@ -235,8 +242,8 @@ class output_layer(nn.Module):
 
     def forward(self, inputs):
         batches, features, frames, nodes = inputs.shape
-        output = self.output(inputs.view(batches, -1))
-        return f.relu(output.view(batches, self.num_generator))
+        output = self.output(inputs.contiguous().view(batches, -1))
+        return torch.sigmoid(output.view(batches, self.num_generator))
 
 class Spatial_attention_layer(nn.Module):
     def __init__(self, feats, frames, nodes):

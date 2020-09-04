@@ -18,30 +18,31 @@ from baseline import Baseline
 from gat import GAT, GAT_edge
 from loss import MSE_loss, Huber_loss
 import argparse
-os.environ['CUDA_VISIBLE_DEVICES'] = '0,1'
+os.environ['CUDA_VISIBLE_DEVICES'] = '0'
 
 def evaluate(model, data_iter, data_loader, num_epoch, threshold=0.5):
     model.eval()
     loss_total = 0
     accu = 0
     with torch.no_grad():
-        for epoch in num_epoch:
+        for epoch in range(num_epoch):
             try:
-                num_generator, Y, infos, labels = next(data_iter)
-                Y, infos, labels = Y.cuda(), infos.cuda(), labels.cuda()
+                Y, infos, labels = next(data_iter)
+                Y, infos, labels = Y.float().cuda(), infos.float().cuda(), labels.type(torch.int32).cuda()
             except StopIteration:
                 batch_iterator = iter(data_loader)
-                num_generator, Y, infos, labels = next(batch_iterator)
-                Y, infos, labels = Y.cuda(), infos.cuda(), labels.cuda()
+                Y, infos, labels = next(batch_iterator)
+                Y, infos, labels = Y.float().cuda(), infos.float().cuda(), labels.type(torch.int32).cuda()
             label_predicted = model(Y, infos)
             labels_threshold = label_predicted > threshold
-            all_right = torch.mean(1 - labels ^ labels_threshold)
-            loss_total += F.cross_entropy(label_predicted, labels)
+            all_right = 1 - torch.mean((labels ^ labels_threshold).type(torch.float32))
+            loss_total += Huber_loss(label_predicted, labels.long())
             accu += all_right
 
     accu /= num_epoch
     return accu, loss_total
 
+@torch.no_grad()
 def test(test_iter, test_loader, weigths_path, num_epoch, model_type=0, threshold=0.5):
     if model_type == 0:
         model = Baseline(in_channels=7, out_channels_1=7, out_channels_2=7, KT_1=4, KT_2=3, num_nodes=39,
@@ -52,31 +53,32 @@ def test(test_iter, test_loader, weigths_path, num_epoch, model_type=0, threshol
         model = GAT_edge()
     else:
         raise
-    model.load_state_dict(weigths_path)
-    model = nn.DataParallel(model)
+    model.load_state_dict(torch.load(weigths_path))
+    # model = nn.DataParallel(model)
     model = model.cuda()
     model.eval()
     accu = 0
-    with torch.no_grad:
-        for epoch in num_epoch:
-            try:
-                num_generator, Y, infos, labels = next(test_iter)
-                Y, infos, labels = Y.cuda(), infos.cuda(), labels.cuda()
-            except StopIteration:
-                batch_iterator = iter(test_loader)
-                num_generator, Y, infos, labels = next(batch_iterator)
-                Y, infos, labels = Y.cuda(), infos.cuda(), labels.cuda()
-            label_predicted = model(Y, infos)
-            labels_threshold = label_predicted > threshold
-            all_right = torch.mean(1 - labels ^ labels_threshold)
-            accu += all_right
+    for epoch in range(num_epoch):
+        try:
+            Y, infos, labels = next(test_iter)
+            Y, infos, labels = Y.float().cuda(), infos.float().cuda(), labels.type(torch.int32).cuda()
+        except StopIteration:
+            batch_iterator = iter(test_loader)
+            Y, infos, labels = next(batch_iterator)
+            Y, infos, labels = Y.float().cuda(), infos.float().cuda(), labels.type(torch.int32).cuda()
+        label_predicted = model(Y, infos)
+        labels_threshold = label_predicted > threshold
+        all_right = 1 - torch.mean((labels ^ labels_threshold).type(torch.float32))
+        print('epoch:{}, accu:{}'.format(epoch, all_right))
+        accu += all_right
     accu /= num_epoch
     return accu
 
 if __name__ == '__main__':
-    test_data = trainSet(39, 1600, 1)
+    test_data = trainSet(39, 1600, 2)
     testloader = DataLoader(test_data, batch_size=16, shuffle=True)
     test_iter = iter(testloader)
-    test(test_iter, testloader, )
+    accu = test(test_iter, testloader, './weights/baseline_0.995.pth', 100, 0)
+    print('acuu:{}'.format(accu))
 
  
