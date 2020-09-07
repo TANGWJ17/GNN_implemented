@@ -17,6 +17,14 @@ def Y_process(Y_):
     Y_[row, col] = np.zeros(Y_.shape[0])
     return Y_
 
+def label_data(power_angle):
+    abs_data = abs(power_angle)
+    dMin, dMax = abs_data.min(), abs_data.max()
+    angle_1 = abs(abs_data - dMin) > 180
+    angle_2 = abs(abs_data - dMax) > 180
+    angle_labeled = list(map(int, angle_1)) if np.sum(angle_1) < np.sum(angle_2) else list(map(int, angle_2))
+    return np.array(angle_labeled)
+
 def read_data(num_nodes, num, number_data):
     all_Data = np.load('./data/sample_0_{}.npz'.format(number_data), allow_pickle=True)
     Data = all_Data['arr_0']
@@ -42,7 +50,8 @@ def read_data(num_nodes, num, number_data):
         Y[:, 2, :, :] = Y_after  # the Y(after accident)
         where_are_nan = np.isnan(Data[11 + i * 10 + added])
         Data[11 + i * 10 + added][where_are_nan] = 200
-        labels[i] = np.array(list(map(int, (abs(Data[11 + i * 10 + added]) - 180) > 0)))
+        # labels[i] = np.array(list(map(int, (abs(Data[11 + i * 10 + added]) - 180) > 0)))
+        labels[i] = label_data(Data[11 + i * 10 + added])
         infos[i, :6, :, : ] = np.transpose(Data[12 + i * 10 + added].reshape(33, num_nodes, 6), [2, 0, 1])
     for i in range(num_nodes, num):
         added = i // num_nodes
@@ -57,7 +66,8 @@ def read_data(num_nodes, num, number_data):
             Y[:, 2, :, :] = Y_after  # the Y(after accident)
             where_are_nan = np.isnan(Data[11 + i * 10 + added])
             Data[11 + i * 10 + added][where_are_nan] = 200
-            labels[i] = np.array(list(map(int, (abs(Data[11 + i * 10 + added]) - 180) > 0)))
+            # labels[i] = np.array(list(map(int, (abs(Data[11 + i * 10 + added]) - 180) > 0)))
+            labels[i] = label_data(Data[11 + i * 10 + added])
             infos[i, :6, :, :] = np.transpose(Data[12 + i * 10 + added].reshape(33, num_nodes, 6), [2, 0, 1])
         except IndexError:
             print(i)
@@ -65,7 +75,20 @@ def read_data(num_nodes, num, number_data):
 
 class trainSet(Dataset):
     def __init__(self, num_nodes, num, number_data):
-        num_generator, Y, infos, labels = read_data(num_nodes, num, number_data)
+        if type(number_data) is int:
+            _, Y, infos, labels = read_data(num_nodes, num, number_data)
+        if type(number_data) is list:
+            if len(number_data) == 0:
+                print('please input the data_number you want to use')
+                raise
+            else:
+                num_generator, Y, infos, labels = read_data(num_nodes, num, number_data[0])
+                for i in range(1, len(number_data)):
+                    _, Y_, infos_, labels_ = read_data(num_nodes, num, number_data[i])
+                    Y = np.concatenate((Y, Y_))
+                    infos = np.concatenate((infos, infos_))
+                    labels = np.concatenate((labels, labels_))
+
         self.Y = Y            # the matrix Y
         self.data = infos     # the time-dependent data
         self.result = labels  # the ground truth for nodes
@@ -79,26 +102,10 @@ class trainSet(Dataset):
 
 
 if __name__ == '__main__':
-    # train_data = trainSet(10, 5, 4, 33)
-    # trainloader = DataLoader(train_data, batch_size=4, shuffle=True)
-    # for epoch in range(2):
-    #     for i, datas in enumerate(trainloader):
-    #         Y, data, result = datas
-    #         print(Y.shape)
+    if type(1) is int:
+        print("it's an integer")
+    exit(0)
 
-
-    # with open('label.txt', 'w') as f:
-    #     for label in labels:
-    #         f.writelines(str(label))
-    # exit(0)
-    # all_Data = np.load('./data/sample_0_{}.npz'.format(0), allow_pickle=True)
-    # data = all_Data['arr_0']
-    # np.savez('./data/Y_raw.npz', data[1])
-
-    a = np.array([0, 1, 0])
-    b = np.array([True, True, False])
-    c = 1 - a ^ b
-    print(c)
     exit(0)
     import networkx as nx
     a = np.array([[0.0, 0.0, 1.0], [0.0, 0.0, 1.0], [1.0, 1.0, 0.0]])
@@ -111,43 +118,9 @@ if __name__ == '__main__':
     c = torch.cat([a, b], 1)
     print(c.shape)
     print(net.nodes[0].data['feats'].shape)
-
     exit(0)
     arr = [1, 2, 3, 4, 5]
     print(arr[-4:])
     exit(0)
-    all_data = np.load('./data/Y_raw.npz', allow_pickle=True)
-    data = all_data['arr_0']
-    print(data.shape)
-    exit(0)
-    print(data[0])
-    print(data[1])
-    print(data[2])
-    print(data[3])
-    print(data[4])
-    exit(0)
-    for i in range(39):
-        print('epoch: ' + str(i + 1))
-        print(data[4 + i * 10 ])  # trouble node name
-        print(data[9 + i * 10])  # stable or not
-        print(data[11 + i * 10])  # power angle
-        # print(data[12 + i * 10].shape)  # raw data without trouble node number
-    exit(0)
-    for i in range(39, 50):
-        added = i // 39
-        # print('epoch: ' + str(i + 1))
-        print(data[4 + i * 10 + added - 2])
-        try:
-            print(data[9 + i * 10 + added - 2])
-            print(data[11 + i * 10 + added - 2])
-            # a = abs(data[12 + i * 10 + added]) > 180
-        except IndexError:
-            print(i)
-    # a, num = read_data()
-    # print(a)
-    # print(num)
 
 
-
-
- 

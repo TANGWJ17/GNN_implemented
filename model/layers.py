@@ -223,7 +223,7 @@ class Spatial_conv(nn.Module):
                 Y_number = 2
         Y_need = self.Y[batches, Y_number, :, :].cpu().numpy()
         nx_graph = nx.from_numpy_matrix(Y_need)
-        graph = dgl.from_networkx(nx_graph)# .to(torch.device('cpu'))
+        graph = dgl.from_networkx(nx_graph).to(torch.device('cuda:0'))
         # add features to all the nodes
         graph.ndata['feats'] = (self.infos[batches, :, frames, :]).T
         # graph.edata['weights'] = (self.Y[batches, Y_number, :, :] *

@@ -31,13 +31,13 @@ parser = argparse.ArgumentParser(
         description='GNN used in fault nodes prediction')
 parser.add_argument('--model', default='baseline', type=str, choices=['baseline', 'GAT', 'GAT_edge'],
                         help='choose the model you need to train')
-parser.add_argument('--batch_size', default=16, type=int,
+parser.add_argument('--batch_size', default=32, type=int,
                         help='Batch size for training')
 parser.add_argument('--cuda', default=True, type=bool,
                         help='using cuda for accelerating')
 parser.add_argument('--init_type', default='xavier', type=str, choices=['normal', 'xavier', 'kaiming', 'orthogonal'],
                         help='several init method')
-parser.add_argument('--lr', '--learning-rate', default=1e-3, type=float,
+parser.add_argument('--lr', '--learning-rate', default=1e-4, type=float,
                         help='initial learning rate')
 parser.add_argument('--save_folder', default='weights/',
                         help='Directory for saving checkpoint models')
@@ -106,12 +106,14 @@ def train():
     net = net.cuda()
 
     accuracy = 0
-    data_amount = 1600 # 8144
-    num_epoch = data_amount // args.batch_size
-    train_data = trainSet(39, data_amount, 0)
+    train_file = 4
+    train_amount = 6400 # 8144
+    eval_amount = 3200
+    num_epoch = train_amount // args.batch_size * train_file
+    train_data = trainSet(39, train_amount, [0, 1, 2, 3])
     trainloader = DataLoader(train_data, batch_size=args.batch_size, shuffle=True)
     batch_loader = iter(trainloader)
-    eval_data = trainSet(39, 160, 1)
+    eval_data = trainSet(39, eval_amount, 4)
     evalloader = DataLoader(eval_data, batch_size=args.batch_size, shuffle=True)
     eval_iter = iter(evalloader)
     optimizer = optim.Adam(net.parameters(), lr=args.lr)
@@ -135,7 +137,7 @@ def train():
         loss.backward()
         optimizer.step()
         print('epoch:{}/{} | loss:{:.4f}'.format(epoch + 1, num_epoch, loss.item()))
-        with open(args.log_folder + 'loss_accu.log', mode='a') as f:
+        with open(args.log_folder + 'loss.log', mode='a') as f:
             f.writelines('\n epoch:{}/{} | loss:{:.4f}'.format(epoch + 1, num_epoch, loss.item()))
 
         #  eval ------------------------------------------------
@@ -143,6 +145,8 @@ def train():
             net.eval()
             accu, _ = evaluate(model=net, data_iter=eval_iter, data_loader=evalloader, num_epoch=10)
             print('accuracy:{}'.format(accu))
+            with open(args.log_folder + 'accu.log', mode='a') as f:
+                f.writelines('\n eval epoch:{} | loss:{:.4f}'.format(epoch // 20 + 1, loss.item()))
             if accu > accuracy:
                 torch.save(net.state_dict(), args.save_folder + '{}_{}.pth'.format(args.model, accu))
                 accuracy = accu

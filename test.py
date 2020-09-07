@@ -8,15 +8,17 @@
 import os
 
 import torch
-import torch.optim as optim
 import torch.nn as nn
-import torch.backends.cudnn as cudnn
+import numpy as np
 from torch.utils.data import DataLoader
-import torch.nn.functional as F
 from dataloader import trainSet
 from baseline import Baseline
 from gat import GAT, GAT_edge
 from loss import MSE_loss, Huber_loss
+from loss import plot
+from sklearn.metrics import confusion_matrix
+import seaborn as sns
+import matplotlib.pyplot as plt
 import argparse
 os.environ['CUDA_VISIBLE_DEVICES'] = '0'
 
@@ -58,6 +60,8 @@ def test(test_iter, test_loader, weigths_path, num_epoch, model_type=0, threshol
     model = model.cuda()
     model.eval()
     accu = 0
+    true_labels = np.array([])
+    pred_labels = np.array([])
     for epoch in range(num_epoch):
         try:
             Y, infos, labels = next(test_iter)
@@ -68,13 +72,24 @@ def test(test_iter, test_loader, weigths_path, num_epoch, model_type=0, threshol
             Y, infos, labels = Y.float().cuda(), infos.float().cuda(), labels.type(torch.int32).cuda()
         label_predicted = model(Y, infos)
         labels_threshold = label_predicted > threshold
+        true_labels = np.concatenate((true_labels, labels.reshape((1, -1)[0])))
+        pred_labels = np.concatenate((pred_labels, labels_threshold.reshape((1, -1)[0])))
         all_right = 1 - torch.mean((labels ^ labels_threshold).type(torch.float32))
         print('epoch:{}, accu:{}'.format(epoch, all_right))
         accu += all_right
     accu /= num_epoch
+    plot(confusion_matrix(true_labels, pred_labels))
     return accu
 
 if __name__ == '__main__':
+    true_ = np.array([[0, 1, 1, 0], [1, 1, 1, 1]]).reshape((1, -1))
+    print(true_[0])
+    exit(0)
+    pred_ = np.array([[1, 1, 1, 0], [1, 1, 1, 1]]).reshape((1, -1))
+    print(true_[0])
+    cn = confusion_matrix(true_[0], pred_[0])
+    print(cn)
+    exit(0)
     test_data = trainSet(39, 1600, 2)
     testloader = DataLoader(test_data, batch_size=16, shuffle=True)
     test_iter = iter(testloader)

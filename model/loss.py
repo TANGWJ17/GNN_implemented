@@ -8,7 +8,13 @@
 import warnings
 import torch
 import torch.nn as nn
+import numpy as np
+import matplotlib.pyplot as plt
+import pylab as pl
 import torch.nn.functional as F
+import seaborn as sns
+import re
+
 
 def MSE_loss(outputs, labels):
     """
@@ -23,6 +29,7 @@ def MSE_loss(outputs, labels):
                       stacklevel=2)
     loss = nn.MSELoss()
     return 0.5 * loss(outputs.float(), labels.float())
+
 
 def Huber_loss(outputs, labels, delta=0.2):
     """
@@ -46,4 +53,35 @@ def Huber_loss(outputs, labels, delta=0.2):
     return loss
 
 
+def draw_loss(loss_path):
+    itera = []
+    loss = []
+    lines = open(loss_path, 'r').readlines()
+    for line in lines:
+        itera.append(int(line.strip().split('epoch:')[1].split('/')[0]))
+        loss.append(float(line.strip().split('loss:')[1]))
+    return itera, loss
 
+
+def plot(matrix):
+    sns.set()
+    f, ax = plt.subplots()
+    matrix = matrix.astype('float') / matrix.sum(axis=1)[:, np.newaxis]
+    matrix = np.around(matrix, decimals=2)
+    # print(matrix)  # 打印出来看看
+    sns.heatmap(matrix, annot=True, cmap="Blues", ax=ax)  # 画热力图
+    ax.set_title('confusion matrix')  # 标题
+    plt.xticks(np.array(range(2)), ['stable', 'unstable'])
+    plt.yticks(np.array(range(2)), ['stable', 'unstable'])
+    ax.set_xlabel('predict')  # x轴
+    ax.set_ylabel('true')  # y轴
+    plt.savefig('../data/confusion_matrix.png')
+
+if __name__ == '__main__':
+    file_path = '../logs/loss_accu.log'
+    itera, loss = draw_loss(file_path)
+    pl.plot(itera, loss, 'b-')
+    pl.xlabel(u'iters')
+    pl.ylabel(u'loss')
+    plt.title('Training loss with iteration')
+    plt.savefig('../data/Loss.png')
