@@ -52,6 +52,7 @@ class Baseline(nn.Module):
     def __init__(self, in_channels, out_channels_1, out_channels_2, KT_1, KT_2,
                  num_nodes, batch_size, frames, frames_0, num_generator):
         super(Baseline, self).__init__()
+        self.dropout = nn.Dropout(0.1)
         self.st_1 = st_conv_block(in_channels, out_channels_1, out_channels_2, KT_1,
                  num_nodes, batch_size, frames, frames_0)
         self.st_2 = st_conv_block(out_channels_2, out_channels_2, out_channels_2, KT_2,
@@ -59,7 +60,8 @@ class Baseline(nn.Module):
         self.output_layer = output_layer(out_channels_2, frames - 4 * (KT_1 + KT_2 - 2), num_nodes, num_generator)
 
     def forward(self, Y, infos):
-        x_1 = self.st_1(infos, Y)
+        infos_ = self.dropout(infos)
+        x_1 = self.st_1(infos_, Y)
         x_2 = self.st_2(x_1, Y)
         return self.output_layer(x_2)
 

@@ -9,13 +9,16 @@
 import os
 import numpy as np
 import torch
+import torch.nn as nn
 import dgl
 from torch.utils.data import Dataset, DataLoader
+
 
 def Y_process(Y_):
     row, col = np.diag_indices(Y_.shape[0])
     Y_[row, col] = np.zeros(Y_.shape[0])
     return Y_
+
 
 def label_data(power_angle):
     abs_data = abs(power_angle)
@@ -24,6 +27,7 @@ def label_data(power_angle):
     angle_2 = abs(abs_data - dMax) > 180
     angle_labeled = list(map(int, angle_1)) if np.sum(angle_1) < np.sum(angle_2) else list(map(int, angle_2))
     return np.array(angle_labeled)
+
 
 def read_data(num_nodes, num, number_data):
     all_Data = np.load('./data/sample_0_{}.npz'.format(number_data), allow_pickle=True)
@@ -36,30 +40,32 @@ def read_data(num_nodes, num, number_data):
     #     num_generator += 1 if '发电' in node_name else 0
     for i in range(len(node_names)):
         name_dict[node_names[i]] = i
-    Y = np.zeros([num, 3, num_nodes, num_nodes])   # num * 3(before/ing/after) * num_nodes * num_nodes
+    Y = np.zeros([num, 3, num_nodes, num_nodes])  # num * 3(before/ing/after) * num_nodes * num_nodes
     infos = np.zeros([num, 6 + 1, 33, num_nodes])  # num * feature(+1) * frames * num_nodes
     labels = np.zeros([num, num_generator])  # num * num_generator
     Y_raw = np.sqrt(np.power(Y_process(Y_RAW[0]), 2) + np.power(Y_process(Y_RAW[1]), 2))
-    Y[:, 0, :, :] = Y_raw # the original Y(before accident)
+    Y[:, 0, :, :] = Y_raw  # the original Y(before accident)
     for i in range(num_nodes):
         added = -2 if number_data > 0 else 0
         infos[i, 6, :, name_dict[Data[4 + i * 10 + added]]] = 1  # feature of trouble node number
-        Y_in = np.sqrt(np.power(Y_process(Data[6 + i * 10 + added][0]), 2) + np.power(Y_process(Data[6 + i * 10 + added][1]), 2))
+        Y_in = np.sqrt(
+            np.power(Y_process(Data[6 + i * 10 + added][0]), 2) + np.power(Y_process(Data[6 + i * 10 + added][1]), 2))
         Y[:, 1, :, :] = Y_in  # the Y(in accident)
-        Y_after = np.sqrt(np.power(Y_process(Data[6 + i * 10 + added][2]), 2) + np.power(Y_process(Data[6 + i * 10 + added][3]), 2))
+        Y_after = np.sqrt(
+            np.power(Y_process(Data[6 + i * 10 + added][2]), 2) + np.power(Y_process(Data[6 + i * 10 + added][3]), 2))
         Y[:, 2, :, :] = Y_after  # the Y(after accident)
         where_are_nan = np.isnan(Data[11 + i * 10 + added])
         Data[11 + i * 10 + added][where_are_nan] = 200
         # labels[i] = np.array(list(map(int, (abs(Data[11 + i * 10 + added]) - 180) > 0)))
         labels[i] = label_data(Data[11 + i * 10 + added])
-        infos[i, :6, :, : ] = np.transpose(Data[12 + i * 10 + added].reshape(33, num_nodes, 6), [2, 0, 1])
+        infos[i, :6, :, :] = np.transpose(Data[12 + i * 10 + added].reshape(33, num_nodes, 6), [2, 0, 1])
     for i in range(num_nodes, num):
         added = i // num_nodes
         added -= 2 if number_data > 0 else 0
         try:
             infos[i, 6, :, name_dict[Data[4 + i * 10 + added]]] = 1  # feature of trouble node number
             Y_in = np.sqrt(np.power(Y_process(Data[6 + i * 10 + added][0]), 2) +
-                               np.power(Y_process(Data[6 + i * 10 + added][1]), 2))
+                           np.power(Y_process(Data[6 + i * 10 + added][1]), 2))
             Y[:, 1, :, :] = Y_in  # the Y(in accident)
             Y_after = np.sqrt(np.power(Y_process(Data[6 + i * 10 + added][2]), 2) +
                               np.power(Y_process(Data[6 + i * 10 + added][3]), 2))
@@ -72,6 +78,7 @@ def read_data(num_nodes, num, number_data):
         except IndexError:
             print(i)
     return num_generator, Y, infos, labels
+
 
 class trainSet(Dataset):
     def __init__(self, num_nodes, num, number_data):
@@ -89,8 +96,8 @@ class trainSet(Dataset):
                     infos = np.concatenate((infos, infos_))
                     labels = np.concatenate((labels, labels_))
 
-        self.Y = Y            # the matrix Y
-        self.data = infos     # the time-dependent data
+        self.Y = Y  # the matrix Y
+        self.data = infos  # the time-dependent data
         self.result = labels  # the ground truth for nodes
 
     def __getitem__(self, index):
@@ -102,12 +109,11 @@ class trainSet(Dataset):
 
 
 if __name__ == '__main__':
-    if type(1) is int:
-        print("it's an integer")
-    exit(0)
-
+    a = 1
+    print(a)
     exit(0)
     import networkx as nx
+
     a = np.array([[0.0, 0.0, 1.0], [0.0, 0.0, 1.0], [1.0, 1.0, 0.0]])
     net = dgl.from_networkx(nx.from_numpy_matrix(a))
     net.ndata['feats'] = torch.randn((3, 5))
@@ -122,5 +128,3 @@ if __name__ == '__main__':
     arr = [1, 2, 3, 4, 5]
     print(arr[-4:])
     exit(0)
-
-

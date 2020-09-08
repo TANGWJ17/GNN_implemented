@@ -106,11 +106,11 @@ def train():
     net = net.cuda()
 
     accuracy = 0
-    train_file = 4
-    train_amount = 6400 # 8144
+    train_file = 2
+    train_amount = 6400  # 8144
     eval_amount = 3200
     num_epoch = train_amount // args.batch_size * train_file
-    train_data = trainSet(39, train_amount, [0, 1, 2, 3])
+    train_data = trainSet(39, train_amount, [0, 1])
     trainloader = DataLoader(train_data, batch_size=args.batch_size, shuffle=True)
     batch_loader = iter(trainloader)
     eval_data = trainSet(39, eval_amount, 4)
@@ -131,8 +131,9 @@ def train():
             Y, infos, labels = next(batch_iterator)
             Y, infos, labels = Y.float().cuda(), infos.float().cuda(), labels.float().cuda()
         label_predicted = net(Y, infos)
+        # loss = MSE_loss(label_predicted, labels.long())
+        # criteria = nn.BCELoss()
         loss = MSE_loss(label_predicted, labels.long())
-        # loss = F.cross_entropy(label_predicted, labels.long())
         optimizer.zero_grad()
         loss.backward()
         optimizer.step()

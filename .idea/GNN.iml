@@ -8,6 +8,8 @@
     </content>
     <orderEntry type="jdk" jdkName="Remote Python 3.7.7 (sftp://tangwj@101.6.64.59:8837/home/tangwj/anaconda3/envs/torch/bin/python3.7)" jdkType="Python SDK" />
     <orderEntry type="sourceFolder" forTests="false" />
+    <orderEntry type="library" name="R User Library" level="project" />
+    <orderEntry type="library" name="R Skeletons" level="application" />
   </component>
   <component name="PyDocumentationSettings">
     <option name="renderExternalDocumentation" value="true" />

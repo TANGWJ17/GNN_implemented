@@ -48,7 +48,7 @@ def evaluate(model, data_iter, data_loader, num_epoch, threshold=0.5):
 def test(test_iter, test_loader, weigths_path, num_epoch, model_type=0, threshold=0.5):
     if model_type == 0:
         model = Baseline(in_channels=7, out_channels_1=7, out_channels_2=7, KT_1=4, KT_2=3, num_nodes=39,
-                       batch_size=16, frames=33, frames_0=12, num_generator=10)
+                       batch_size=32, frames=33, frames_0=12, num_generator=10)
     elif model_type == 1:
         model = GAT()
     elif model_type == 2:
@@ -65,16 +65,16 @@ def test(test_iter, test_loader, weigths_path, num_epoch, model_type=0, threshol
     for epoch in range(num_epoch):
         try:
             Y, infos, labels = next(test_iter)
-            Y, infos, labels = Y.float().cuda(), infos.float().cuda(), labels.type(torch.int32).cuda()
+            Y, infos, labels = Y.float().cuda(), infos.float().cuda(), labels.type(torch.int32)
         except StopIteration:
             batch_iterator = iter(test_loader)
             Y, infos, labels = next(batch_iterator)
-            Y, infos, labels = Y.float().cuda(), infos.float().cuda(), labels.type(torch.int32).cuda()
+            Y, infos, labels = Y.float().cuda(), infos.float().cuda(), labels.type(torch.int32)
         label_predicted = model(Y, infos)
         labels_threshold = label_predicted > threshold
-        true_labels = np.concatenate((true_labels, labels.reshape((1, -1)[0])))
-        pred_labels = np.concatenate((pred_labels, labels_threshold.reshape((1, -1)[0])))
-        all_right = 1 - torch.mean((labels ^ labels_threshold).type(torch.float32))
+        true_labels = np.concatenate((true_labels, labels.reshape((1, -1))[0]))
+        pred_labels = np.concatenate((pred_labels, labels_threshold.cpu().reshape((1, -1))[0]))
+        all_right = 1 - torch.mean((labels ^ labels_threshold.cpu()).type(torch.float32))
         print('epoch:{}, accu:{}'.format(epoch, all_right))
         accu += all_right
     accu /= num_epoch
@@ -82,18 +82,10 @@ def test(test_iter, test_loader, weigths_path, num_epoch, model_type=0, threshol
     return accu
 
 if __name__ == '__main__':
-    true_ = np.array([[0, 1, 1, 0], [1, 1, 1, 1]]).reshape((1, -1))
-    print(true_[0])
-    exit(0)
-    pred_ = np.array([[1, 1, 1, 0], [1, 1, 1, 1]]).reshape((1, -1))
-    print(true_[0])
-    cn = confusion_matrix(true_[0], pred_[0])
-    print(cn)
-    exit(0)
-    test_data = trainSet(39, 1600, 2)
-    testloader = DataLoader(test_data, batch_size=16, shuffle=True)
+    test_data = trainSet(39, 3200, 5)
+    testloader = DataLoader(test_data, batch_size=32, shuffle=True)
     test_iter = iter(testloader)
-    accu = test(test_iter, testloader, './weights/baseline_0.995.pth', 100, 0)
+    accu = test(test_iter, testloader, './weights/baseline_0.76.pth', 100, 0)
     print('acuu:{}'.format(accu))
 
  
