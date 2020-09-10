@@ -45,7 +45,7 @@ def evaluate(model, data_iter, data_loader, num_epoch, threshold=0.5):
     return accu, loss_total
 
 @torch.no_grad()
-def test(test_iter, test_loader, weigths_path, num_epoch, model_type=0, threshold=0.5):
+def test(test_iter, test_loader, weigths_path, num_epoch, model_type=0, threshold=0.7):
     if model_type == 0:
         model = Baseline(in_channels=7, out_channels_1=7, out_channels_2=7, KT_1=4, KT_2=3, num_nodes=39,
                        batch_size=32, frames=33, frames_0=12, num_generator=10)
@@ -62,6 +62,7 @@ def test(test_iter, test_loader, weigths_path, num_epoch, model_type=0, threshol
     accu = 0
     true_labels = np.array([])
     pred_labels = np.array([])
+    label_float = np.array([])
     for epoch in range(num_epoch):
         try:
             Y, infos, labels = next(test_iter)
@@ -71,6 +72,7 @@ def test(test_iter, test_loader, weigths_path, num_epoch, model_type=0, threshol
             Y, infos, labels = next(batch_iterator)
             Y, infos, labels = Y.float().cuda(), infos.float().cuda(), labels.type(torch.int32)
         label_predicted = model(Y, infos)
+        label_float = np.concatenate((label_float, label_predicted.cpu().reshape((1, -1))[0]))
         labels_threshold = label_predicted > threshold
         true_labels = np.concatenate((true_labels, labels.reshape((1, -1))[0]))
         pred_labels = np.concatenate((pred_labels, labels_threshold.cpu().reshape((1, -1))[0]))
@@ -79,13 +81,23 @@ def test(test_iter, test_loader, weigths_path, num_epoch, model_type=0, threshol
         accu += all_right
     accu /= num_epoch
     plot(confusion_matrix(true_labels, pred_labels))
+    plt.figure(figsize=(20, 8), dpi=100)
+    distance = 0.1
+    group_num = int((max(label_float) - min(label_float)) / distance)
+    plt.hist(label_float, bins=group_num)
+    # plt.xticks(range(min(label_float), max(label_float))[::2])
+    plt.grid(linestyle="--", alpha=0.5)
+    plt.xlabel("label output")
+    plt.ylabel("frequency")
+    plt.savefig('./data/frequency.png')
     return accu
 
+
 if __name__ == '__main__':
-    test_data = trainSet(39, 3200, 5)
+    test_data = trainSet(39, 3200, 6)
     testloader = DataLoader(test_data, batch_size=32, shuffle=True)
     test_iter = iter(testloader)
-    accu = test(test_iter, testloader, './weights/baseline_0.76.pth', 100, 0)
+    accu = test(test_iter, testloader, './weights/baseline_0.755.pth', 100, 0)
     print('acuu:{}'.format(accu))
 
  

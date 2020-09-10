@@ -84,6 +84,7 @@ def init_weights(net, init_type='normal', gain=0.02):
     # print('initialize network with %s' % init_type)
     net.apply(init_func)
 
+
 def train():
     if args.model is 'baseline':
         net = Baseline(in_channels=7, out_channels_1=7, out_channels_2=7, KT_1=4, KT_2=3, num_nodes=39,
@@ -106,11 +107,11 @@ def train():
     net = net.cuda()
 
     accuracy = 0
-    train_file = 2
+    train_file = 4
     train_amount = 6400  # 8144
     eval_amount = 3200
     num_epoch = train_amount // args.batch_size * train_file
-    train_data = trainSet(39, train_amount, [0, 1])
+    train_data = trainSet(39, train_amount, [0, 1, 2, 3])
     trainloader = DataLoader(train_data, batch_size=args.batch_size, shuffle=True)
     batch_loader = iter(trainloader)
     eval_data = trainSet(39, eval_amount, 4)
@@ -136,6 +137,7 @@ def train():
         loss = MSE_loss(label_predicted, labels.long())
         optimizer.zero_grad()
         loss.backward()
+        nn.utils.clip_grad_norm_(net.parameters(), max_norm=20, norm_type=2)
         optimizer.step()
         print('epoch:{}/{} | loss:{:.4f}'.format(epoch + 1, num_epoch, loss.item()))
         with open(args.log_folder + 'loss.log', mode='a') as f:

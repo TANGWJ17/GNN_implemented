@@ -16,7 +16,9 @@ import torch.nn as nn
 import torch.nn.functional as f
 
 from multiprocessing.dummy import Pool
+
 np.set_printoptions(threshold=10000)
+
 
 # class Temporal_conv(nn.Module):
 #     """
@@ -119,7 +121,7 @@ class Temporal_conv_layer(nn.Module):
 
         if self.act_fun is 'GLU':
 
-            return (x_conv[:, 0:self.c_out, :, :] + x_input) * torch.sigmoid(x_conv[:, -self.c_out:, :, :])
+            return (x_conv[:, 0:self.c_out, :, :] + x_input) * torch.tanh(x_conv[:, -self.c_out:, :, :])
         else:
             if self.act_fun is 'linear':
                 return x_conv
@@ -140,7 +142,7 @@ class NodeApplyModule(nn.Module):
     def forward(self, node):
         feats = self.linear(node.data['feats'])
         feats = self.activation(feats)
-        return {'feats' : feats}   # return updated node feature feats(l+1)
+        return {'feats': feats}  # return updated node feature feats(l+1)
 
 
 def gcn_reduce(nodes):
@@ -160,6 +162,7 @@ class Spatial_conv(nn.Module):
             infos: [batch_size, in_channels, frames, num_nodes]
             Output: [batch_size, out_channels, frame, num_nodes]
         """
+
     def __init__(self, in_channels, batch_size, frames, num_nodes, Y=None, infos=None):
         super(Spatial_conv, self).__init__()
         self.c_in = in_channels
@@ -245,12 +248,13 @@ class output_layer(nn.Module):
         output = self.output(inputs.contiguous().view(batches, -1))
         return torch.sigmoid(output.view(batches, self.num_generator))
 
+
 class Spatial_attention_layer(nn.Module):
     def __init__(self, feats, frames, nodes):
         super(Spatial_attention_layer, self).__init__()
-        self.W_1 = torch.randn((frames, ))
+        self.W_1 = torch.randn((frames,))
         self.W_2 = torch.randn((feats, frames))
-        self.W_3 = torch.randn((feats, ))
+        self.W_3 = torch.randn((feats,))
         self.b_s = torch.randn((1, nodes, nodes))
         self.V_s = torch.randn((nodes, nodes))
 
@@ -273,6 +277,7 @@ class Spatial_attention_layer(nn.Module):
         exp = torch.exp(S)
         S_normalized = exp / torch.sum(exp, dim=1)
         return S_normalized
+
 
 class cheb_conv_SAT(nn.Module):
     def __init__(self, filters, features, K, cheb_polynomials):
@@ -303,16 +308,17 @@ class cheb_conv_SAT(nn.Module):
                 rhs = torch.matmul(T_k_with_at.transpose((0, 2, 1)),
                                    graph_signal)
 
-                output = output + rhs @  theta_k
+                output = output + rhs @ theta_k
             outputs.append(output.expand_dims(-1))
         return f.relu(torch.cat(*outputs, dim=-1))
+
 
 class Temporal_attention_layer(nn.Module):
     def __init__(self, features, frames, nodes):
         super(Temporal_attention_layer, self).__init__()
-        self.U_1 = torch.randn((nodes, ))
+        self.U_1 = torch.randn((nodes,))
         self.U_2 = torch.randn((features, nodes))
-        self.U_3 = torch.randn((features, ))
+        self.U_3 = torch.randn((features,))
         self.b_e = torch.randn((1, frames, frames))
         self.V_e = torch.randn((frames, frames))
 
@@ -322,7 +328,7 @@ class Temporal_attention_layer(nn.Module):
         lhs = (x.transpose((0, 3, 2, 1)) @ self.U_1) @ self.U_2
 
         # shape is (N, V, T)
-        rhs = self.U_3 @  x.transpose((2, 0, 1, 3))
+        rhs = self.U_3 @ x.transpose((2, 0, 1, 3))
 
         product = torch.matmul(lhs, rhs)
 
@@ -333,6 +339,7 @@ class Temporal_attention_layer(nn.Module):
         exp = torch.exp(E)
         E_normalized = exp / torch.sum(exp, dim=1)
         return E_normalized
+
 
 class ASTGCN_block(nn.Module):
     def __init__(self, backbone):
@@ -350,7 +357,7 @@ class ASTGCN_block(nn.Module):
         self.TAT = Temporal_attention_layer(features, frames, nodes)
         self.time_conv = nn.Conv2d(in_channels=features, out_channels=num_of_time_filters, kernel_size=(1, 3))
         self.residual_conv = nn.Conv2d(in_channels=features, out_channels=num_of_time_filters, kernel_size=(1, 1))
-        self.ln = nn.LayerNorm() # TODO set the size of layer
+        self.ln = nn.LayerNorm()  # TODO set the size of layer
 
     def forward(self, x):
         (batch_size, num_of_vertices,
@@ -376,6 +383,7 @@ class ASTGCN_block(nn.Module):
 
         return self.ln(f.relu(x_residual + time_conv_output))
 
+
 if __name__ == '__main__':
     # xx = torch.randn(5, 33, 10, 20)
     # xx = xx.reshape((5, 1, 33, 10, 20))
@@ -393,8 +401,3 @@ if __name__ == '__main__':
     print(output.shape)
     outout = f.relu(output.view(10, 3))
     print(outout)
-
-
-
-
-
